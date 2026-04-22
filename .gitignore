@@ -1,4 +1,5 @@
 priv
+src/crates.hrl
 
 # ---> Erlang
 .rebar3
