@@ -1,6 +1,6 @@
 [package]
 name = "sied"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 authors = ["Steve Roques <steve.roques@gmail.com>"]
 description = "High-performance SIMD operations for Erlang via Rustler"
