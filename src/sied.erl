@@ -61,6 +61,40 @@
     negate_f64/1
 ]).
 
+%% Batch Operations (vector search)
+-export([
+    dot_product_batch_f32/2,
+    dot_product_batch_f32_bin/2,
+    dot_product_batch_f64/2
+]).
+
+%% Vector Norm and Normalization
+-export([
+    l2_norm_f32/1,
+    l2_norm_f64/1,
+    l2_normalize_f32/1,
+    l2_normalize_f64/1,
+    l2_normalize_batch_f32/1,
+    l2_normalize_batch_f64/1
+]).
+
+%% Cosine Similarity
+-export([
+    cosine_similarity_f32/2,
+    cosine_similarity_f64/2,
+    cosine_similarity_batch_f32/2,
+    cosine_similarity_batch_f64/2
+]).
+
+%% Binary Quantization
+-export([
+    to_binary_f32/1,
+    to_binary_f32_bin/1,
+    hamming_distance_batch/2,
+    hamming_topk_flat/4,
+    dot_product_topk_flat/4
+]).
+
 -on_load(init/0).
 
 -define(APPNAME, sied).
@@ -344,4 +378,127 @@ negate_f32(_A) ->
 %% @returns {ok, Result} | {error, Reason}
 -spec negate_f64([float()]) -> {ok, [float()]} | {error, term()}.
 negate_f64(_A) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%%%===================================================================
+%%% Batch Operations (vector search)
+%%%===================================================================
+
+%% @doc Compute dot product of Query against every vector in Vecs.
+%% Returns {ok, [Score]} in input order. One NIF call for the whole batch.
+-spec dot_product_batch_f32([float()], [[float()]]) -> {ok, [float()]} | {error, term()}.
+dot_product_batch_f32(_Query, _Vecs) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc Dot product of a query f32 binary against a list of f32 binaries.
+%% Binaries are little-endian IEEE 754 f32 (4 bytes per element).
+%% Avoids Erlang float-list marshalling — use with kvex f32-binary storage.
+-spec dot_product_batch_f32_bin(binary(), [binary()]) -> {ok, [float()]} | {error, term()}.
+dot_product_batch_f32_bin(_Query, _Vecs) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc Compute dot product of Query against every f64 vector in Vecs.
+-spec dot_product_batch_f64([float()], [[float()]]) -> {ok, [float()]} | {error, term()}.
+dot_product_batch_f64(_Query, _Vecs) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%%%===================================================================
+%%% Vector Norm and Normalization
+%%%===================================================================
+
+%% @doc L2 (Euclidean) norm of an f32 vector
+-spec l2_norm_f32([float()]) -> {ok, float()} | {error, term()}.
+l2_norm_f32(_A) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc L2 (Euclidean) norm of an f64 vector
+-spec l2_norm_f64([float()]) -> {ok, float()} | {error, term()}.
+l2_norm_f64(_A) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc L2-normalize an f32 vector to unit length.
+%% Returns the original vector if its norm is zero.
+-spec l2_normalize_f32([float()]) -> {ok, [float()]} | {error, term()}.
+l2_normalize_f32(_A) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc L2-normalize an f64 vector to unit length.
+-spec l2_normalize_f64([float()]) -> {ok, [float()]} | {error, term()}.
+l2_normalize_f64(_A) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc L2-normalize a batch of f32 vectors.
+-spec l2_normalize_batch_f32([[float()]]) -> {ok, [[float()]]} | {error, term()}.
+l2_normalize_batch_f32(_Vecs) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc L2-normalize a batch of f64 vectors.
+-spec l2_normalize_batch_f64([[float()]]) -> {ok, [[float()]]} | {error, term()}.
+l2_normalize_batch_f64(_Vecs) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%%%===================================================================
+%%% Cosine Similarity
+%%%===================================================================
+
+%% @doc Cosine similarity between two f32 vectors: dot(A,B) / (|A| * |B|).
+%% Returns a value in [-1.0, 1.0].
+-spec cosine_similarity_f32([float()], [float()]) -> {ok, float()} | {error, term()}.
+cosine_similarity_f32(_A, _B) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc Cosine similarity between two f64 vectors.
+-spec cosine_similarity_f64([float()], [float()]) -> {ok, float()} | {error, term()}.
+cosine_similarity_f64(_A, _B) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc Batch cosine similarity: one f32 query against many f32 vectors.
+-spec cosine_similarity_batch_f32([float()], [[float()]]) -> {ok, [float()]} | {error, term()}.
+cosine_similarity_batch_f32(_Query, _Vecs) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc Batch cosine similarity: one f64 query against many f64 vectors.
+-spec cosine_similarity_batch_f64([float()], [[float()]]) -> {ok, [float()]} | {error, term()}.
+cosine_similarity_batch_f64(_Query, _Vecs) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%%%===================================================================
+%%% Binary Quantization
+%%%===================================================================
+
+%% @doc 1-bit quantize an f32 vector. Each element becomes 1 if above mean,
+%% else 0. Returns a packed binary: 128 dims → 16 bytes.
+%% Use hamming_distance_batch/2 to search over quantized vectors.
+-spec to_binary_f32([float()]) -> {ok, binary()} | {error, term()}.
+to_binary_f32(_Vec) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc Like to_binary_f32/1 but accepts a little-endian f32 binary instead of a float list.
+%% Zero-copy path when the vector is already stored as a binary (e.g. in kvex ETS).
+-spec to_binary_f32_bin(binary()) -> {ok, binary()} | {error, term()}.
+to_binary_f32_bin(_Data) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc Batch hamming distance between a query binary and a list of binaries.
+%% Returns {ok, [Distance]} where lower distance means more similar.
+%% Uses u64 POPCNT for speed. Intended for the first phase of two-phase
+%% ANN search: hamming_distance_batch → filter top-N → dot_product_batch.
+-spec hamming_distance_batch(binary(), [binary()]) -> {ok, [non_neg_integer()]} | {error, term()}.
+hamming_distance_batch(_Query, _Vecs) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc Hamming top-K from a flat binary buffer (all vectors concatenated).
+%% Returns {ok, [Idx]} — the indices of the top_k closest vectors, sorted ascending
+%% by Hamming distance. O(N) partition + O(K log K) sort, no per-element Erlang overhead.
+-spec hamming_topk_flat(binary(), binary(), pos_integer(), pos_integer()) ->
+        {ok, [non_neg_integer()]} | {error, term()}.
+hamming_topk_flat(_Query, _FlatVecs, _VecLen, _TopK) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @doc Dot-product scoring of selected vectors from a flat f32 binary.
+%% indices: list produced by hamming_topk_flat.
+%% Returns {ok, [{Score, Idx}]} sorted by descending score.
+-spec dot_product_topk_flat(binary(), binary(), pos_integer(), [non_neg_integer()]) ->
+        {ok, [{float(), non_neg_integer()}]} | {error, term()}.
+dot_product_topk_flat(_Query, _FlatF32, _VecByteLen, _Indices) ->
     erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).

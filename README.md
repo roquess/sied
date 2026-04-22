@@ -10,31 +10,24 @@ High-performance SIMD operations for Erlang through Rust NIFs.
 
 Erlang excels at building concurrent, fault-tolerant systems, but numerical computations on large datasets can be a bottleneck. Modern CPUs offer SIMD (Single Instruction, Multiple Data) instructions that can process multiple data elements simultaneously, providing significant performance improvements for vectorized operations.
 
-**sied** bridges this gap by exposing SIMD-accelerated mathematical operations to Erlang through a safe Rust NIF. The name combines **SI**MD with **E**rlang and **D**ata, representing the library's core purpose: bringing efficient data-parallel processing to the Erlang ecosystem.
-
-This library enables Erlang applications to perform high-throughput numerical computations without sacrificing the language's strengths in concurrency and reliability.
+**sied** bridges this gap by exposing SIMD-accelerated mathematical operations to Erlang through a Rust NIF. The name combines **SI**MD with **E**rlang and **D**ata, representing the library's core purpose: bringing efficient data-parallel processing to the Erlang ecosystem.
 
 ## Features
 
-- **Zero unsafe code**: All operations implemented in 100% safe Rust
-- **Automatic SIMD optimization**: Compiler leverages AVX2, AVX-512, NEON, and other instruction sets
-- **Simple API**: Consistent interface with proper error handling
-- **Production-ready**: Comprehensive test suite with benchmarks
-- **Cross-platform**: Works across different CPU architectures with graceful fallback
-
-## Implementation
-
-This library uses [Rustler](https://crates.io/crates/rustler) to create Native Implemented Functions (NIFs) that bridge Erlang and Rust. Rustler provides a safe, idiomatic way to write Erlang NIFs in Rust with automatic memory management and type conversion.
-
-The mathematical operations are implemented using safe iterator-based patterns that the LLVM compiler automatically vectorizes into SIMD instructions when beneficial. This approach provides excellent performance while maintaining memory safety guarantees.
+- **Automatic SIMD optimization**: Compiler leverages AVX2, AVX-512, NEON, and other instruction sets via [simdeez](https://crates.io/crates/simdeez)
+- **Flat-binary search primitives**: `hamming_topk_flat/4` and `dot_product_topk_flat/4` operate on concatenated binary buffers — zero per-element Erlang overhead, designed for ANN search
+- **Simple API**: Consistent `{ok, Result} | {error, Reason}` interface throughout
+- **Cross-platform**: Works across different CPU architectures with graceful scalar fallback
 
 ## Installation
 
-### From Hex.pm
-
 Add to your `rebar.config`:
 
-### From GitHub
+```erlang
+{deps, [{sied, "0.2.0"}]}.
+```
+
+Or from GitHub:
 
 ```erlang
 {deps, [
@@ -50,64 +43,154 @@ rebar3 compile
 
 **Requirements:**
 - Erlang/OTP 24 or later
-- Rust 1.70 or later
-- Cargo (included with Rust)
+- Rust 1.70 or later (Cargo included)
 
 The Rust toolchain must be available in your PATH. Visit [rustup.rs](https://rustup.rs) to install Rust.
+
+For maximum performance (full AVX2/AVX-512), build with:
+
+```bash
+RUSTFLAGS="-C target-cpu=native" rebar3 as prod compile
+```
 
 ## API Reference
 
 All functions return `{ok, Result}` on success or `{error, Reason}` on failure.
 
-### Vector Addition
+### Basic Arithmetic
 
-Element-wise addition of two vectors.
+Element-wise operations on f32 or f64 vectors.
 
 ```erlang
-%% Single-precision (f32)
 {ok, Result} = sied:add_f32([1.0, 2.0, 3.0], [4.0, 5.0, 6.0]).
 %% Result = [5.0, 7.0, 9.0]
-
-%% Double-precision (f64)
-{ok, Result} = sied:add_f64([1.0, 2.0], [3.0, 4.0]).
-%% Result = [4.0, 6.0]
-```
-
-### Vector Multiplication
-
-Element-wise multiplication of two vectors.
-
-```erlang
-{ok, Result} = sied:multiply_f32([2.0, 3.0, 4.0], [5.0, 6.0, 7.0]).
-%% Result = [10.0, 18.0, 28.0]
 
 {ok, Result} = sied:multiply_f64([2.0, 3.0], [4.0, 5.0]).
 %% Result = [8.0, 15.0]
 ```
 
-### Dot Product
+Available: `add_f32/2`, `add_f64/2`, `subtract_f32/2`, `subtract_f64/2`,
+`multiply_f32/2`, `multiply_f64/2`, `divide_f32/2`, `divide_f64/2`.
 
-Scalar product of two vectors: sum(a[i] * b[i])
+### Dot Product & Sum
 
 ```erlang
 {ok, Dot} = sied:dot_product_f32([1.0, 2.0, 3.0], [4.0, 5.0, 6.0]).
-%% Dot = 32.0  (1*4 + 2*5 + 3*6)
-
-{ok, Dot} = sied:dot_product_f64([1.0, 2.0, 3.0], [4.0, 5.0, 6.0]).
 %% Dot = 32.0
-```
 
-### Sum
-
-Sum of all elements in a vector.
-
-```erlang
 {ok, Sum} = sied:sum_f32([1.0, 2.0, 3.0, 4.0, 5.0]).
 %% Sum = 15.0
-
-{ok, Sum} = sied:sum_f64([1.0, 2.0, 3.0, 4.0, 5.0]).
-%% Sum = 15.0
 ```
+
+### Statistics
+
+```erlang
+{ok, Mean} = sied:mean_f32([1.0, 2.0, 3.0]).
+{ok, Var}  = sied:variance_f32([1.0, 2.0, 3.0]).
+{ok, Std}  = sied:std_dev_f32([1.0, 2.0, 3.0]).
+```
+
+Also available in f64 variants.
+
+### Min / Max
+
+```erlang
+{ok, Min} = sied:min_f32([3.0, 1.0, 2.0]).   %% 1.0
+{ok, Max} = sied:max_f32([3.0, 1.0, 2.0]).   %% 3.0
+{ok, R}   = sied:min_elementwise_f32([1.0, 4.0], [2.0, 3.0]).  %% [1.0, 3.0]
+```
+
+### Unary Operations
+
+```erlang
+{ok, R} = sied:abs_f32([-1.0, 2.0, -3.0]).   %% [1.0, 2.0, 3.0]
+{ok, R} = sied:sqrt_f32([4.0, 9.0, 16.0]).   %% [2.0, 3.0, 4.0]
+{ok, R} = sied:negate_f32([1.0, -2.0]).       %% [-1.0, 2.0]
+```
+
+### L2 Norm and Normalization
+
+```erlang
+{ok, Norm} = sied:l2_norm_f32([3.0, 4.0]).       %% 5.0
+{ok, Unit} = sied:l2_normalize_f32([3.0, 4.0]).   %% [0.6, 0.8]
+{ok, Vecs} = sied:l2_normalize_batch_f32([[3.0, 4.0], [0.0, 2.0]]).
+```
+
+### Cosine Similarity
+
+```erlang
+{ok, Sim} = sied:cosine_similarity_f32([1.0, 0.0], [0.0, 1.0]).  %% 0.0
+{ok, Sims} = sied:cosine_similarity_batch_f32(Query, [Vec1, Vec2, Vec3]).
+```
+
+### Batch Dot Product
+
+One query against many vectors in a single NIF call.
+
+```erlang
+{ok, Scores} = sied:dot_product_batch_f32(Query, [Vec1, Vec2, Vec3]).
+
+%% Binary variant — avoids float-list marshalling when vectors are stored
+%% as little-endian f32 binaries (e.g. in ETS):
+{ok, Scores} = sied:dot_product_batch_f32_bin(QBin, [Bin1, Bin2, Bin3]).
+```
+
+### Binary Quantization & Flat-Buffer ANN Search (v0.2.0)
+
+These primitives are designed for two-phase approximate nearest-neighbour search on large indexes where the entire vector set is stored as a single concatenated binary (flat buffer) in ETS.
+
+#### `to_binary_f32/1` and `to_binary_f32_bin/1`
+
+1-bit quantize a vector: each dimension becomes 1 if above the mean, else 0. 128 dims → 16 bytes.
+
+```erlang
+{ok, BinVec} = sied:to_binary_f32([0.1, 0.9, 0.4, 0.8]).
+%% BinVec = <<0b0101:4, ...>>  (packed bits)
+
+%% Zero-copy variant when the vector is already a little-endian f32 binary:
+{ok, BinVec} = sied:to_binary_f32_bin(F32Binary).
+```
+
+#### `hamming_topk_flat/4`
+
+SIMD POPCNT over a flat binary buffer. Returns the indices of the `TopK` closest vectors, sorted ascending by Hamming distance. O(N) + O(K log K).
+
+```erlang
+%% BvecFlat = all binary-quantized vectors concatenated
+%% VecLen   = byte size of one quantized vector
+{ok, Indices} = sied:hamming_topk_flat(QBinVec, BvecFlat, VecLen, TopK).
+%% Indices = [3, 17, 42, ...]  (0-based, sorted by distance)
+```
+
+Uses a max-heap of size K — O(K) memory regardless of corpus size.
+
+#### `dot_product_topk_flat/4`
+
+SIMD dot-product scoring of a candidate set selected from a flat f32 buffer. Designed to follow `hamming_topk_flat/4` in the two-phase search pipeline.
+
+```erlang
+%% F32Flat    = all f32 vectors concatenated
+%% VecByteLen = dim * 4
+%% Indices    = output of hamming_topk_flat/4
+{ok, Scored} = sied:dot_product_topk_flat(QF32Bin, F32Flat, VecByteLen, Indices).
+%% Scored = [{Score, Idx}, ...]  sorted by descending score
+```
+
+Uses zero-copy f32 reinterpretation — no heap allocation per candidate.
+
+#### Two-phase ANN example
+
+```erlang
+%% Phase 1 — fast Hamming filter
+CandCount = K * 10,
+{ok, Cands} = sied:hamming_topk_flat(QBin, BvecFlat, VecByteLen, CandCount),
+
+%% Phase 2 — precise dot-product rerank
+{ok, Scored} = sied:dot_product_topk_flat(QF32Bin, F32Flat, VecF32ByteLen, Cands),
+TopK = lists:sublist(Scored, K).
+```
+
+See [kvex](https://hex.pm/packages/kvex) for a complete k-NN index built on these primitives.
 
 ## Error Handling
 
@@ -115,47 +198,30 @@ Binary operations require vectors of equal length:
 
 ```erlang
 case sied:add_f32([1.0, 2.0], [3.0]) of
-    {ok, Result} ->
-        io:format("Success: ~p~n", [Result]);
-    {error, length_mismatch} ->
-        io:format("Error: vectors must have equal length~n")
+    {ok, Result} -> io:format("Success: ~p~n", [Result]);
+    {error, length_mismatch} -> io:format("vectors must have equal length~n")
 end.
 ```
 
 ## Testing
 
-Run the complete test suite:
-
 ```bash
 rebar3 eunit
 ```
 
-The test suite includes:
-- Functional correctness tests
-- Edge cases (empty vectors, single elements, negative values)
-- Large vector operations (10,000+ elements)
-- Performance benchmarks comparing NIF vs pure Erlang implementations
+## Performance
 
-### Running Benchmarks
+The flat-buffer primitives (`hamming_topk_flat`, `dot_product_topk_flat`) are designed for high-throughput ANN search:
 
-```bash
-rebar3 eunit --module=sied
-```
+- `hamming_topk_flat` on 10 000 × 128-dim vectors: ~10 μs (release, AVX2)
+- `dot_product_topk_flat` on 100 candidates × 128-dim: ~5 μs (release, AVX2)
+- Combined two-phase search with [kvex](https://hex.pm/packages/kvex): **21 000+ queries/s** at 10 000 vectors, dim=128, K=10
 
-Benchmarks test operations on 100,000-element vectors over multiple iterations to measure:
-- Per-operation latency
-- Throughput for large datasets
-- Speedup compared to native Erlang implementations
+General characteristics by vector size:
 
-## Performance Characteristics
-
-Performance varies based on vector size due to NIF call overhead and SIMD efficiency:
-
-- **Small vectors** (< 100 elements): NIF overhead may dominate, modest improvements
-- **Medium vectors** (100-10,000 elements): Good speedup over pure Erlang
-- **Large vectors** (> 10,000 elements): Maximum SIMD benefit, significant speedup
-
-The implementation is optimized for real-world workloads across all vector sizes, with the compiler making intelligent decisions about SIMD usage based on data alignment, vector length, and available CPU features.
+- **Small** (< 100 elements): NIF call overhead dominates — use pure Erlang for tiny vectors
+- **Medium** (100–10 000 elements): Good speedup over pure Erlang
+- **Large** (> 10 000 elements): Maximum SIMD benefit
 
 ## Project Structure
 
@@ -166,49 +232,23 @@ sied/
 │   └── sied.erl              # Erlang API module
 ├── native/
 │   └── sied/
-│       ├── Cargo.toml        # Rust dependencies and configuration
+│       ├── Cargo.toml        # Rust dependencies
 │       └── src/
 │           └── lib.rs        # Rust NIF implementation
 ├── test/
 │   └── sied_tests.erl        # EUnit test suite
-├── rebar.config              # rebar3 build configuration
+├── rebar.config
 └── README.md
 ```
-
-## Safety and Correctness
-
-This library prioritizes safety and correctness:
-
-1. **No unsafe code**: Every Rust function uses safe abstractions verified by the compiler
-2. **Automatic bounds checking**: All vector accesses are bounds-checked, preventing buffer overflows
-3. **Memory safety**: Rust's ownership system eliminates use-after-free and data races
-4. **Graceful degradation**: Falls back to scalar operations when SIMD is unavailable
-5. **Comprehensive testing**: Both Rust unit tests and Erlang integration tests
-
-While hand-written SIMD with unsafe code can sometimes achieve higher performance, this library chooses safety and maintainability. The performance from compiler auto-vectorization is excellent for the vast majority of applications, and the safety guarantees are invaluable in production environments.
-
-## Dependencies
-
-This library uses the following Rust crates:
-
-- [rustler](https://crates.io/crates/rustler) - Safe Rust bindings for writing Erlang NIFs
-
-Special thanks to the Rustler team for making safe, high-performance Erlang NIFs practical.
-
-## Contributing
-
-Contributions are welcome! When contributing, please ensure:
-
-- All code remains 100% safe Rust (no unsafe blocks)
-- Tests pass: `rebar3 eunit`
-- Code is well-documented with clear comments
-- New features include appropriate tests
-- Benchmarks show no performance regressions
 
 ## Links
 
 - GitHub: [https://github.com/roquess/sied](https://github.com/roquess/sied)
 - Hex.pm: [https://hex.pm/packages/sied](https://hex.pm/packages/sied)
-- Rustler on crates.io: [https://crates.io/crates/rustler](https://crates.io/crates/rustler)
-- Simdeez on crates.io: [https://crates.io/crates/simdeez](https://crates.io/crates/simdeez)
+- kvex (ANN index using sied): [https://hex.pm/packages/kvex](https://hex.pm/packages/kvex)
+- Rustler: [https://crates.io/crates/rustler](https://crates.io/crates/rustler)
+- Simdeez: [https://crates.io/crates/simdeez](https://crates.io/crates/simdeez)
 
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE).
