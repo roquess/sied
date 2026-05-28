@@ -1,4 +1,4 @@
-.PHONY: build test publish clean docs
+.PHONY: build build_if_needed test publish clean docs
 
 # Auto-detect platform
 ifeq ($(OS),Windows_NT)
@@ -16,8 +16,11 @@ else
     endif
 endif
 
+# Locate cargo: prefer PATH, fall back to the default rustup location.
+CARGO := $(shell command -v cargo 2>/dev/null || echo $(HOME)/.cargo/bin/cargo)
+
 build:
-	cd native/sied && cargo build --release
+	cd native/sied && $(CARGO) build --release
 	mkdir -p priv
 	cp native/sied/target/release/*$(DLL_EXT) priv/$(NIF_NAME)
 
