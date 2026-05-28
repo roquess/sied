@@ -21,6 +21,9 @@ build:
 	mkdir -p priv
 	cp native/sied/target/release/*$(DLL_EXT) priv/$(NIF_NAME)
 
+build_if_needed:
+	@if [ ! -f "priv/$(NIF_NAME)" ]; then $(MAKE) build; fi
+
 test: build
 	rebar3 do eunit, ct
 
