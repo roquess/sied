@@ -1,5 +1,7 @@
 priv/*
 !priv/sied.dll
+!priv/sied.so
+!priv/sied.dylib
 src/crates.hrl
 
 # ---> Erlang
