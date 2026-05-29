@@ -1,0 +1,80 @@
+name: Build NIF binaries
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'native/**'
+      - 'Makefile'
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/sied/target
+          key: linux-cargo-${{ hashFiles('native/sied/Cargo.lock', 'native/sied/Cargo.toml') }}
+          restore-keys: linux-cargo-
+
+      - name: Build Linux NIF
+        run: make build
+
+      - name: Commit sied.so
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add priv/sied.so
+          if git diff --staged --quiet; then
+            echo "sied.so unchanged, nothing to commit"
+          else
+            git commit -m "ci: update Linux sied.so binary [skip ci]"
+            git push
+          fi
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/sied/target
+          key: macos-cargo-${{ hashFiles('native/sied/Cargo.lock', 'native/sied/Cargo.toml') }}
+          restore-keys: macos-cargo-
+
+      - name: Build macOS NIF
+        run: make build
+
+      - name: Commit sied.dylib
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add priv/sied.dylib
+          if git diff --staged --quiet; then
+            echo "sied.dylib unchanged, nothing to commit"
+          else
+            git commit -m "ci: update macOS sied.dylib binary [skip ci]"
+            git push
+          fi
