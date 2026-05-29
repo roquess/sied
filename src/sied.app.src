@@ -1,6 +1,6 @@
 {application, sied,
  [{description, "High-performance SIMD operations for Erlang via Rust NIF using Rustler"},
-  {vsn, "0.2.6"},
+  {vsn, "0.2.7"},
   {registered, []},
   {applications, [
    kernel,
