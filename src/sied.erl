@@ -95,6 +95,18 @@
     dot_product_topk_flat/4
 ]).
 
+%% Binary-first API (raw NIFs; prefer the sied_bin wrappers)
+-export([
+    decode_u16_f32/2,
+    add_f32_bin/2,
+    subtract_f32_bin/2,
+    multiply_f32_bin/2,
+    divide_f32_bin/2,
+    sum_f32_bin/1,
+    dot_product_f32_bin/2,
+    normalized_difference_f32_bin/2
+]).
+
 -on_load(init/0).
 
 -define(APPNAME, sied).
@@ -501,4 +513,48 @@ hamming_topk_flat(_Query, _FlatVecs, _VecLen, _TopK) ->
 -spec dot_product_topk_flat(binary(), binary(), pos_integer(), [non_neg_integer()]) ->
         {ok, [{float(), non_neg_integer()}]} | {error, term()}.
 dot_product_topk_flat(_Query, _FlatF32, _VecByteLen, _Indices) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%%%===================================================================
+%%% Binary-first API (see sied_bin for docs)
+%%%===================================================================
+
+%% @private
+-spec decode_u16_f32(binary(), float()) -> {ok, binary()} | {error, term()}.
+decode_u16_f32(_Data, _Scale) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @private
+-spec add_f32_bin(binary(), binary()) -> {ok, binary()} | {error, term()}.
+add_f32_bin(_A, _B) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @private
+-spec subtract_f32_bin(binary(), binary()) -> {ok, binary()} | {error, term()}.
+subtract_f32_bin(_A, _B) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @private
+-spec multiply_f32_bin(binary(), binary()) -> {ok, binary()} | {error, term()}.
+multiply_f32_bin(_A, _B) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @private
+-spec divide_f32_bin(binary(), binary()) -> {ok, binary()} | {error, term()}.
+divide_f32_bin(_A, _B) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @private
+-spec sum_f32_bin(binary()) -> {ok, float()} | {error, term()}.
+sum_f32_bin(_A) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @private
+-spec dot_product_f32_bin(binary(), binary()) -> {ok, float()} | {error, term()}.
+dot_product_f32_bin(_A, _B) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).
+
+%% @private
+-spec normalized_difference_f32_bin(binary(), binary()) -> {ok, binary()} | {error, term()}.
+normalized_difference_f32_bin(_A, _B) ->
     erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, ?LINE}]}).

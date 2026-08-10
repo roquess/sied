@@ -756,6 +756,183 @@ fn dot_product_topk_flat<'a>(
 }
 
 //==============================================================================
+// Binary-first API (sied_bin) — typed decode + fused, DirtyCpu, tile-scale
+//==============================================================================
+// These back the sied_bin module: little-endian binaries in and out, no float
+// lists. Additive and non-breaking — nothing above changes, so kvex is
+// unaffected. Alignment-checked reinterpret (no UB), scalar fallback otherwise.
+
+fn sb_build_binary<'a, F>(env: Env<'a>, n: usize, fill: F) -> Result<Term<'a>, Error>
+where
+    F: FnOnce(&mut [u8]),
+{
+    let mut owned = match OwnedBinary::new(n) {
+        Some(b) => b,
+        None => return Ok((atoms::error(), atoms::invalid_input()).encode(env)),
+    };
+    fill(owned.as_mut_slice());
+    Ok((atoms::ok(), owned.release(env)).encode(env))
+}
+
+fn sb_as_f32(bytes: &[u8]) -> Option<&[f32]> {
+    if cfg!(target_endian = "little") && bytes.as_ptr() as usize % 4 == 0 {
+        Some(unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const f32, bytes.len() / 4) })
+    } else {
+        None
+    }
+}
+
+fn sb_f32_input<'a>(bytes: &'a [u8], scratch: &'a mut Vec<f32>) -> &'a [f32] {
+    match sb_as_f32(bytes) {
+        Some(s) => s,
+        None => {
+            *scratch = bytes
+                .chunks_exact(4)
+                .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                .collect();
+            scratch.as_slice()
+        }
+    }
+}
+
+fn sb_as_u16(bytes: &[u8]) -> Option<&[u16]> {
+    if cfg!(target_endian = "little") && bytes.as_ptr() as usize % 2 == 0 {
+        Some(unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const u16, bytes.len() / 2) })
+    } else {
+        None
+    }
+}
+
+fn sb_out_f32(bytes: &mut [u8]) -> &mut [f32] {
+    unsafe { std::slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut f32, bytes.len() / 4) }
+}
+
+fn sb_vec_to_bin<'a>(env: Env<'a>, v: &[f32]) -> Result<Term<'a>, Error> {
+    sb_build_binary(env, v.len() * 4, |ob| sb_out_f32(ob).copy_from_slice(v))
+}
+
+simd_runtime_generate! {
+    fn normalized_difference_f32_simd(a: &[f32], b: &[f32], out: &mut [f32]) {
+        let zero = S::Vf32::set1(0.0);
+        let w = S::Vf32::WIDTH;
+        let n = a.len();
+        let mut i = 0;
+        while i + w <= n {
+            let va = S::Vf32::load_from_slice(&a[i..]);
+            let vb = S::Vf32::load_from_slice(&b[i..]);
+            let denom = va + vb;
+            let ratio = (va - vb) / denom;
+            let mask = denom.cmp_eq(zero);        // all-1s where denom == 0
+            mask.blendv(ratio, zero).copy_to_slice(&mut out[i..]);
+            i += w;
+        }
+        while i < n {
+            let d = a[i] + b[i];
+            out[i] = if d == 0.0 { 0.0 } else { (a[i] - b[i]) / d };
+            i += 1;
+        }
+    }
+}
+
+/// Widen a little-endian `u16` binary to a little-endian `f32` binary, scaled.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn decode_u16_f32<'a>(env: Env<'a>, data: Binary<'a>, scale: f64) -> Result<Term<'a>, Error> {
+    let src = data.as_slice();
+    if src.is_empty() {
+        return Ok((atoms::error(), atoms::empty_vector()).encode(env));
+    }
+    if src.len() % 2 != 0 {
+        return Ok((atoms::error(), atoms::invalid_input()).encode(env));
+    }
+    let n = src.len() / 2;
+    let scale = scale as f32;
+    sb_build_binary(env, n * 4, |ob| {
+        let out = sb_out_f32(ob);
+        match sb_as_u16(src) {
+            Some(u) => for i in 0..n { out[i] = u[i] as f32 * scale; },
+            None => for i in 0..n {
+                out[i] = u16::from_le_bytes([src[i * 2], src[i * 2 + 1]]) as f32 * scale;
+            },
+        }
+    })
+}
+
+macro_rules! sb_elementwise {
+    ($name:ident, $simd:ident) => {
+        #[rustler::nif(schedule = "DirtyCpu")]
+        fn $name<'a>(env: Env<'a>, a: Binary<'a>, b: Binary<'a>) -> Result<Term<'a>, Error> {
+            let (ab, bb) = (a.as_slice(), b.as_slice());
+            if ab.len() != bb.len() {
+                return Ok((atoms::error(), atoms::length_mismatch()).encode(env));
+            }
+            if ab.is_empty() {
+                return Ok((atoms::error(), atoms::empty_vector()).encode(env));
+            }
+            if ab.len() % 4 != 0 {
+                return Ok((atoms::error(), atoms::invalid_input()).encode(env));
+            }
+            let (mut sa, mut sb) = (Vec::new(), Vec::new());
+            let af = sb_f32_input(ab, &mut sa);
+            let bf = sb_f32_input(bb, &mut sb);
+            let r = $simd(af, bf);
+            sb_vec_to_bin(env, &r)
+        }
+    };
+}
+
+sb_elementwise!(add_f32_bin, add_f32_simd);
+sb_elementwise!(subtract_f32_bin, subtract_f32_simd);
+sb_elementwise!(multiply_f32_bin, multiply_f32_simd);
+sb_elementwise!(divide_f32_bin, divide_f32_simd);
+
+/// Sum of all `f32` samples in a binary.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn sum_f32_bin<'a>(env: Env<'a>, data: Binary<'a>) -> Result<Term<'a>, Error> {
+    let bytes = data.as_slice();
+    if bytes.is_empty() || bytes.len() % 4 != 0 {
+        return Ok((atoms::error(), atoms::invalid_input()).encode(env));
+    }
+    let mut s = Vec::new();
+    let f = sb_f32_input(bytes, &mut s);
+    Ok((atoms::ok(), sum_f32_simd(f)).encode(env))
+}
+
+/// Dot product of two equal-length `f32` binaries.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn dot_product_f32_bin<'a>(env: Env<'a>, a: Binary<'a>, b: Binary<'a>) -> Result<Term<'a>, Error> {
+    let (ab, bb) = (a.as_slice(), b.as_slice());
+    if ab.len() != bb.len() {
+        return Ok((atoms::error(), atoms::length_mismatch()).encode(env));
+    }
+    if ab.is_empty() || ab.len() % 4 != 0 {
+        return Ok((atoms::error(), atoms::invalid_input()).encode(env));
+    }
+    let (mut sa, mut sb) = (Vec::new(), Vec::new());
+    let af = sb_f32_input(ab, &mut sa);
+    let bf = sb_f32_input(bb, &mut sb);
+    Ok((atoms::ok(), dot_product_f32_simd(af, bf)).encode(env))
+}
+
+/// Normalized difference `(a-b)/(a+b)`, fused single SIMD pass; `0.0` where
+/// `a+b == 0`. Domain-agnostic (NDVI/NDWI are named instances in rast).
+#[rustler::nif(schedule = "DirtyCpu")]
+fn normalized_difference_f32_bin<'a>(env: Env<'a>, a: Binary<'a>, b: Binary<'a>) -> Result<Term<'a>, Error> {
+    let (ab, bb) = (a.as_slice(), b.as_slice());
+    if ab.len() != bb.len() {
+        return Ok((atoms::error(), atoms::length_mismatch()).encode(env));
+    }
+    if ab.is_empty() || ab.len() % 4 != 0 {
+        return Ok((atoms::error(), atoms::invalid_input()).encode(env));
+    }
+    let (mut sa, mut sb) = (Vec::new(), Vec::new());
+    let af = sb_f32_input(ab, &mut sa);
+    let bf = sb_f32_input(bb, &mut sb);
+    sb_build_binary(env, af.len() * 4, |ob| {
+        normalized_difference_f32_simd(af, bf, sb_out_f32(ob));
+    })
+}
+
+//==============================================================================
 // SIMD Implementation Functions using simdeez
 //==============================================================================
 simd_runtime_generate! {
