@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27'
+          rebar3-version: '3'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build NIF
+        shell: bash
+        run: |
+          cargo build --release --manifest-path native/sied/Cargo.toml
+          mkdir -p priv dist
+          case "$RUNNER_OS" in
+            Windows) B=native/sied/target/release/sied.dll;     N=sied.dll ;;
+            macOS)   B=native/sied/target/release/libsied.dylib; N=sied.dylib ;;
+            *)       B=native/sied/target/release/libsied.so;    N=sied.so ;;
+          esac
+          cp "$B" "priv/$N"    # for the tests
+          cp "$B" "dist/$N"    # clean artifact (only the freshly built lib)
+
+      - name: Test
+        run: rebar3 eunit
+
+      - name: Upload prebuilt NIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: sied-nif-${{ runner.os }}
+          path: dist/sied.*
+          if-no-files-found: error
