@@ -24,7 +24,7 @@ Erlang excels at building concurrent, fault-tolerant systems, but numerical comp
 Add to your `rebar.config`:
 
 ```erlang
-{deps, [{sied, "0.2.0"}]}.
+{deps, [{sied, "0.3.0"}]}.
 ```
 
 Or from GitHub:
