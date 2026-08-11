@@ -29,9 +29,10 @@ jobs:
         run: |
           cargo build --release --manifest-path native/sied/Cargo.toml
           mkdir -p priv dist
+          # Erlang loads NIFs as .so on all Unix (macOS included) and .dll on Windows.
           case "$RUNNER_OS" in
-            Windows) B=native/sied/target/release/sied.dll;     N=sied.dll ;;
-            macOS)   B=native/sied/target/release/libsied.dylib; N=sied.dylib ;;
+            Windows) B=native/sied/target/release/sied.dll;      N=sied.dll ;;
+            macOS)   B=native/sied/target/release/libsied.dylib; N=sied.so ;;
             *)       B=native/sied/target/release/libsied.so;    N=sied.so ;;
           esac
           cp "$B" "priv/$N"    # for the tests
