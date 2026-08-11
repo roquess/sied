@@ -28,15 +28,16 @@ jobs:
         shell: bash
         run: |
           cargo build --release --manifest-path native/sied/Cargo.toml
-          mkdir -p priv dist
-          # Erlang loads NIFs as .so on all Unix (macOS included) and .dll on Windows.
+          mkdir -p priv
+          # Per-platform name sied-<os>-<arch>: Erlang loads NIFs as .so on all
+          # Unix (macOS included) and .dll on Windows.
           case "$RUNNER_OS" in
-            Windows) B=native/sied/target/release/sied.dll;      N=sied.dll ;;
-            macOS)   B=native/sied/target/release/libsied.dylib; N=sied.so ;;
-            *)       B=native/sied/target/release/libsied.so;    N=sied.so ;;
+            Windows) SRC=native/sied/target/release/sied.dll;      OS=windows; EXT=dll ;;
+            macOS)   SRC=native/sied/target/release/libsied.dylib; OS=darwin;  EXT=so ;;
+            *)       SRC=native/sied/target/release/libsied.so;     OS=linux;   EXT=so ;;
           esac
-          cp "$B" "priv/$N"    # for the tests
-          cp "$B" "dist/$N"    # clean artifact (only the freshly built lib)
+          case "$(uname -m)" in arm64|aarch64) ARCH=aarch64 ;; *) ARCH=x86_64 ;; esac
+          cp "$SRC" "priv/sied-${OS}-${ARCH}.${EXT}"
 
       - name: Test
         run: rebar3 eunit
@@ -45,5 +46,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sied-nif-${{ runner.os }}
-          path: dist/sied.*
+          path: priv/sied-*
           if-no-files-found: error

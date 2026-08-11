@@ -11,75 +11,56 @@ on:
 permissions:
   contents: write
 
+# Build the per-platform prebuilt NIFs (sied-<os>-<arch>) and commit them so the
+# hex package works without a Rust toolchain. Jobs run sequentially: each commits
+# its binary and rebases on the previous one before pushing.
 jobs:
-  build-linux:
+  linux-x86_64:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            native/sied/target
-          key: linux-cargo-${{ hashFiles('native/sied/Cargo.lock', 'native/sied/Cargo.toml') }}
-          restore-keys: linux-cargo-
-
-      - name: Build Linux NIF
-        run: make build
-
-      - name: Commit sied.so
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build & commit
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add priv/sied.so
-          if git diff --staged --quiet; then
-            echo "sied.so unchanged, nothing to commit"
-          else
-            git commit -m "ci: update Linux sied.so binary [skip ci]"
-            git push
-          fi
+          cargo build --release --manifest-path native/sied/Cargo.toml
+          mkdir -p priv
+          cp native/sied/target/release/libsied.so priv/sied-linux-x86_64.so
+          bash .github/commit-nif.sh priv/sied-linux-x86_64.so "Linux x86_64"
 
-  build-macos:
-    needs: build-linux
+  darwin:
+    needs: linux-x86_64
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            native/sied/target
-          key: macos-cargo-${{ hashFiles('native/sied/Cargo.lock', 'native/sied/Cargo.toml') }}
-          restore-keys: macos-cargo-
-
-      - name: Build macOS NIF
-        run: make build
-
-      - name: Commit sied.dylib
+          targets: x86_64-apple-darwin
+      - name: Build & commit (aarch64 + x86_64)
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add priv/sied.dylib
-          if git diff --staged --quiet; then
-            echo "sied.dylib unchanged, nothing to commit"
-          else
-            git commit -m "ci: update macOS sied.dylib binary [skip ci]"
-            git pull --rebase origin main
-            git push
-          fi
+          mkdir -p priv
+          cargo build --release --manifest-path native/sied/Cargo.toml
+          cp native/sied/target/release/libsied.dylib priv/sied-darwin-aarch64.so
+          cargo build --release --target x86_64-apple-darwin --manifest-path native/sied/Cargo.toml
+          cp native/sied/target/x86_64-apple-darwin/release/libsied.dylib priv/sied-darwin-x86_64.so
+          bash .github/commit-nif.sh priv/sied-darwin-aarch64.so "macOS aarch64"
+          bash .github/commit-nif.sh priv/sied-darwin-x86_64.so "macOS x86_64"
+
+  windows-x86_64:
+    needs: darwin
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build & commit
+        shell: bash
+        run: |
+          cargo build --release --manifest-path native/sied/Cargo.toml
+          mkdir -p priv
+          cp native/sied/target/release/sied.dll priv/sied-windows-x86_64.dll
+          bash .github/commit-nif.sh priv/sied-windows-x86_64.dll "Windows x86_64"

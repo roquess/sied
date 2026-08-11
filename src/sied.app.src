@@ -1,6 +1,6 @@
 {application, sied,
  [{description, "High-performance SIMD operations for Erlang via Rust NIF using Rustler"},
-  {vsn, "0.3.0"},
+  {vsn, "0.3.1"},
   {registered, []},
   {applications, [
    kernel,
@@ -9,5 +9,21 @@
   {env,[]},
   {modules, []},
   {licenses, ["Apache-2.0"]},
-  {links, [{"GitHub", "https://github.com/roquess/sied"}]}
+  {links, [{"GitHub", "https://github.com/roquess/sied"}]},
+
+  {files, [
+    "src",
+    "native/sied/src/lib.rs",
+    "native/sied/Cargo.toml",
+    "native/sied/Cargo.lock",
+    "priv/sied-linux-x86_64.so",
+    "priv/sied-darwin-x86_64.so",
+    "priv/sied-darwin-aarch64.so",
+    "priv/sied-windows-x86_64.dll",
+    "rebar.config", "Makefile", "README*", "LICENSE*"
+  ]},
+
+  %% .so is hard-excluded by rebar3_hex (treated as a build artifact); force the
+  %% prebuilt Linux/macOS NIFs back in via a glob so the package works without cargo.
+  {include_paths, ["priv/sied-*.so"]}
  ]}.

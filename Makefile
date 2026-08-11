@@ -1,20 +1,32 @@
 .PHONY: build build_if_needed test publish clean docs
 
-# Auto-detect platform
+# Per-platform NIF name: sied-<os>-<arch>. Erlang loads NIFs as .so on every
+# Unix (macOS included) and .dll on Windows, so the built .dylib is copied to .so.
 ifeq ($(OS),Windows_NT)
-    DLL_EXT := .dll
-    NIF_NAME := sied.dll
+    OS_TAG   := windows
+    NIF_EXT  := dll
+    BUILT    := sied.dll
+    UNAME_M  := $(PROCESSOR_ARCHITECTURE)
 else
     UNAME_S := $(shell uname -s)
-    ifeq ($(UNAME_S),Linux)
-        DLL_EXT := .so
-        NIF_NAME := sied.so
-    endif
+    UNAME_M := $(shell uname -m)
+    NIF_EXT := so
     ifeq ($(UNAME_S),Darwin)
-        DLL_EXT := .dylib
-        NIF_NAME := sied.dylib
+        OS_TAG := darwin
+        BUILT  := libsied.dylib
+    else
+        OS_TAG := linux
+        BUILT  := libsied.so
     endif
 endif
+
+ifeq ($(filter arm64 aarch64 ARM64,$(UNAME_M)),)
+    ARCH_TAG := x86_64
+else
+    ARCH_TAG := aarch64
+endif
+
+NIF_NAME := sied-$(OS_TAG)-$(ARCH_TAG).$(NIF_EXT)
 
 # Locate cargo: prefer PATH, fall back to the default rustup location.
 CARGO := $(shell command -v cargo 2>/dev/null || echo $(HOME)/.cargo/bin/cargo)
@@ -22,7 +34,7 @@ CARGO := $(shell command -v cargo 2>/dev/null || echo $(HOME)/.cargo/bin/cargo)
 build:
 	cd native/sied && $(CARGO) build --release
 	mkdir -p priv
-	cp native/sied/target/release/*$(DLL_EXT) priv/$(NIF_NAME)
+	cp native/sied/target/release/$(BUILT) priv/$(NIF_NAME)
 
 build_if_needed:
 	@if [ ! -f "priv/$(NIF_NAME)" ]; then $(MAKE) build; fi

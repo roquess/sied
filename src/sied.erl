@@ -110,27 +110,43 @@
 -on_load(init/0).
 
 -define(APPNAME, sied).
--define(LIBNAME, sied).
 
 %%%===================================================================
 %%% NIF Loading
 %%%===================================================================
 
 %% @private
-%% @doc Initialize and load the NIF library
+%% @doc Load the platform-specific prebuilt NIF. Each platform ships its own
+%% file (`sied-<os>-<arch>') because Erlang loads NIFs as `.so' on every Unix
+%% (macOS included) and `.dll' on Windows — so Linux and macOS cannot share a
+%% single `sied.so'. The right one is selected here at load time.
 init() ->
-    SoName = case code:priv_dir(?APPNAME) of
+    PrivDir = case code:priv_dir(?APPNAME) of
         {error, bad_name} ->
             case filelib:is_dir(filename:join(["..", priv])) of
-                true ->
-                    filename:join(["..", priv, ?LIBNAME]);
-                false ->
-                    filename:join([priv, ?LIBNAME])
+                true  -> filename:join(["..", priv]);
+                false -> "priv"
             end;
         Dir ->
-            filename:join(Dir, ?LIBNAME)
+            Dir
     end,
-    erlang:load_nif(SoName, 0).
+    Base = "sied-" ++ os_tag() ++ "-" ++ arch_tag(),
+    erlang:load_nif(filename:join(PrivDir, Base), 0).
+
+os_tag() ->
+    case os:type() of
+        {unix, darwin} -> "darwin";
+        {win32, _}     -> "windows";
+        {unix, _}      -> "linux"
+    end.
+
+arch_tag() ->
+    Low = string:lowercase(erlang:system_info(system_architecture)),
+    case string:find(Low, "aarch64") =/= nomatch
+        orelse string:find(Low, "arm64") =/= nomatch of
+        true  -> "aarch64";
+        false -> "x86_64"   % Windows reports "win32"; default x86_64
+    end.
 
 %%%===================================================================
 %%% Basic Arithmetic Operations
