@@ -64,3 +64,18 @@ jobs:
           mkdir -p priv
           cp native/sied/target/release/sied.dll priv/sied-windows-x86_64.dll
           bash .github/commit-nif.sh priv/sied-windows-x86_64.dll "Windows x86_64"
+
+  linux-aarch64:
+    needs: windows-x86_64
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build & commit
+        run: |
+          cargo build --release --manifest-path native/sied/Cargo.toml
+          mkdir -p priv
+          cp native/sied/target/release/libsied.so priv/sied-linux-aarch64.so
+          bash .github/commit-nif.sh priv/sied-linux-aarch64.so "Linux aarch64"

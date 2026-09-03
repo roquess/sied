@@ -17,6 +17,7 @@
     "native/sied/Cargo.toml",
     "native/sied/Cargo.lock",
     "priv/sied-linux-x86_64.so",
+    "priv/sied-linux-aarch64.so",
     "priv/sied-darwin-x86_64.so",
     "priv/sied-darwin-aarch64.so",
     "priv/sied-windows-x86_64.dll",
